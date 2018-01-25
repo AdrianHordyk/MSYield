@@ -1,0 +1,23 @@
+Package: MSYield
+Type: Package
+Title: Multi-species yield analysis
+Version: 0.1.0
+Authors@R: c(
+    person("Adrian", "Hordyk", , "ar.hordyk@gmail.com", role=c("aut", "cre")))
+Maintainer: A. Hordyk <ar.hordyk@gmail.com>
+Description: Multi-species yield analysis
+License: GPL-2
+Encoding: UTF-8
+LazyData: true
+Depends:
+    snowfall
+Imports: 
+    BAMMtools,
+    dplyr,
+    ggplot2,
+    ggrepel,
+    gridExtra,
+    LBSPR,
+    parallel,
+    readxl
+RoxygenNote: 6.0.1    
