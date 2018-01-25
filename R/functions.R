@@ -322,6 +322,11 @@ runMod <- function(DF, F1, F2, fDisc, Lint=2, plot=TRUE, useParallel=TRUE) {
   optMLLs[optMLLs < DF$SL50] <- DF$SL50[optMLLs < DF$SL50]
   DF$optMLL <- optMLLs
 
+  temp <- DF
+  temp$mll <- temp$optMLL
+  temp2  <- sapply(1:nSp, findMLL, temp, Ftot=F2, LMax, Lint, fDisc, sdLegal=1, control=2)
+  DF$optYield <- temp2[1,]
+  DF$optSB <- temp2[3,]
 
   FVec <- c(F1, F2) # seq(0, to=HighF, by=0.05) # vector if fishing mortality
 
@@ -344,8 +349,16 @@ runMod <- function(DF, F1, F2, fDisc, Lint=2, plot=TRUE, useParallel=TRUE) {
       message("Already calculated ", actLimit,  ". Skipping")
     } else {
       NLimit <- actLimit
-      DF2 <- DF %>% group_by(groups) %>% mutate(mll=mean(optMLL))
-      DF2$mll <- round(DF2$mll,0)
+      # DF2 <- DF %>% group_by(groups) %>% mutate(mll=mean(optMLL))
+      #
+      # temp <- DF %>% group_by(groups) %>% mutate(mll=mean(optMLL))
+      # temp$mll
+
+      DF2 <- DF %>% group_by(groups) %>% mutate(mll=weighted.mean(optMLL, optYield * (1 + 4*optMLL/100)))
+
+
+
+
       outDF <- doCalcs(DF2, nSp, FVec, LMax, Lint, fDisc, useParallel)
       outDF$NLimits <- NLimit
       count <- count + 1
@@ -360,13 +373,17 @@ runMod <- function(DF, F1, F2, fDisc, Lint=2, plot=TRUE, useParallel=TRUE) {
 
   # Plot total yield by number of limits @ F = F1
   df <- outDF %>% filter(F==F1) %>% group_by(NLimits) %>% summarise(Yield=sum(Yield))
-  p1 <- ggplot2::ggplot(df, aes(x = NLimits, y = Yield/max(Yield))) + ggplot2::geom_line(size=2) + ggplot2::theme_classic() +
+  p1 <- ggplot2::ggplot(df, aes(x = NLimits, y = Yield/max(Yield))) + geom_line() + geom_point() +ggplot2::ylim(0, 1)  + ggplot2::theme_classic() +
     ggplot2::labs(x="# Size Limits", y="Relative Yield", title=paste("F = ", F1))
 
+  # Plot total yield by number of limits @ F = F2
+  df <- outDF %>% filter(F==F2) %>% group_by(NLimits) %>% summarise(Yield=sum(Yield))
+  p2 <- ggplot2::ggplot(df, aes(x = NLimits, y = Yield/max(Yield))) + geom_line() + geom_point() + ggplot2::ylim(0, 1) + ggplot2::theme_classic() +
+    ggplot2::labs(x="# Size Limits", y="Relative Yield", title=paste("F = ", F2))
 
   # Plot number extinct by number of limits @ F = F2
   df <- outDF %>% filter(F==F2) %>% group_by(NLimits) %>% summarise(n=sum(SB==0))
-  p2 <- ggplot2::ggplot(df, aes(x = NLimits, y = n/nSp)) + ggplot2::geom_line(size=2) + ggplot2::ylim(0, 1) +
+  p3 <- ggplot2::ggplot(df, aes(x = NLimits, y = n/nSp)) + geom_line() + geom_point() + ggplot2::ylim(0, 1) +
     ggplot2::theme_classic() +
     ggplot2::labs(x="# Size Limits", y="Fraction Extinct", title=paste("F = ", F2))
 
@@ -379,11 +396,11 @@ runMod <- function(DF, F1, F2, fDisc, Lint=2, plot=TRUE, useParallel=TRUE) {
   df$RelYield2 <- cumsum(df$RelYield)
   df$n <- 1:nrow(df)
 
-  p3 <- ggplot2::ggplot(df, aes(x=n, y=RelYield2)) + ggplot2::geom_line(size=2) + ggplot2::ylim(0, 1) +
+  p4 <- ggplot2::ggplot(df, aes(x=n, y=RelYield2)) + ggplot2::geom_line() + geom_point() + ggplot2::ylim(0, 1) +
     ggplot2::theme_classic() +
     ggplot2::labs(x="# Species", y="Cumulative contribution to total yield ", title=paste("F = ", F1))
 
-  pout <- gridExtra::grid.arrange(p1, p2, p3, ncol=2)
+  pout <- gridExtra::grid.arrange(p1, p2, p4, p3, ncol=2)
 
   tt <- df %>% filter(RelYield > 0.05)
   if(dim(tt)[1] > 0) {
@@ -412,7 +429,7 @@ getSL <- function(DF, nLimits=5) {
   }
   mat[is.na(mat)] <- ''
   mat <- as.data.frame(mat)
-  colnames(mat) <- sls
+  colnames(mat) <- round(sls,0)
   mat
 }
 
