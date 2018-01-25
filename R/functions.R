@@ -387,9 +387,33 @@ runMod <- function(DF, F1, F2, fDisc, Lint=2, plot=TRUE, useParallel=TRUE) {
 
   tt <- df %>% filter(RelYield > 0.05)
   if(dim(tt)[1] > 0) {
-    message("Species contributing more than 5% of total catch at F = ", F1)
+    message("\nSpecies contributing more than 5% of total catch at F = ", F1)
+    df$RelYield <- round(df$RelYield,2)
     print(df %>% filter(RelYield > 0.05) %>% select(Species, RelYield) %>% as.data.frame())
   }
 
+  return(outDF)
 }
+
+
+getSL <- function(DF, nLimits=5) {
+
+  tt <- DF %>% filter(nLimits==NLimits) %>% group_by(Species) %>% summarise(sl=unique(mll))
+
+  sls <- sort(unique(tt$sl))
+  n <- max(table(tt$sl))
+  mat <- matrix(NA, nrow=n, ncol=length(sls))
+  for (x in seq_along(sls)) {
+    temp <- tt$Species[tt$sl == sls[x]]
+    n2 <- n - length(temp)
+    temp2 <- append(temp, rep(NA, n2))
+    mat[,x] <- temp2
+
+  }
+  mat[is.na(mat)] <- ''
+  mat <- as.data.frame(mat)
+  colnames(mat) <- sls
+  mat
+}
+
 
