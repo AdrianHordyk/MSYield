@@ -13,7 +13,8 @@
 importData <- function(scenario=1,  nspecies=NA, filename='parameters.xlsx') {
 
   DF <- readxl::read_excel(filename, sheet=scenario)
-  Names <- c("Species", "M_k", "Lm_Linf", "M", "K", "Linf", "L50", "L95", "SL50", "SL95","B0", "Mpow", "h")
+  Names <- c("Species", "M_k", "Lm_Linf", "M", "K", "Linf", "L50", "L95", "SL50", "SL95",
+             "B0", "Mpow", "h", "Weight")
 
   if (any(!names(DF) %in% Names)) stop("invalid names in input file. Must be: ", paste(Names, " ", sep=" "))
 
@@ -72,143 +73,6 @@ optR0 <- function(logR0, B0type=c("SSB0", "B0"), DF, Ftot, LMax, Lint, x) {
   b0 <- slot(Sim, B0type)
   (DF$B0[x] - b0)^2
 }
-#
-# M <- DF$M[x]
-# K <- DF$K[x]
-# Linf <- DF$Linf[x]
-# L50 <- DF$L50[x]
-# L95 <- DF$L95[x]
-# SL50 <- DF$SL50[x]
-# SL95 <- DF$SL95[x]
-# Mpow <- DF$Mpow[x]
-# Steepness <- DF$h[x]
-#
-# F <- 0.2
-# CVLinf <- 0.1
-# SDLinf <- CVLinf * Linf
-#
-# maxsd=2
-# gtgby=1
-# Wbeta=3
-# Walpha <- 0.01
-#
-# MinL <- 0
-# MaxL <- LMax
-# BinWidth <- 1
-# fDisc <- 0.2
-# MLL <- 12
-# R0 <- 1000
-#
-#
-# GTGsim <- function(Linf, SDLinf, L50, L95, SL50, SL95, fDisc, MLL, Steepness,
-#                    MinL, MaxL, BinWidth, Walpha,  Wbeta=3,
-#                    maxsd=2, ngtg=13) {
-#   gtgLinfs <- seq(from=Linf-maxsd*SDLinf, to=Linf+maxsd*SDLinf, length.out=ngtg)
-#
-#   recP <- dnorm(gtgLinfs, Linf, sd=SDLinf) / sum(dnorm(gtgLinfs, Linf, sd=SDLinf))
-#
-#   LBins <- seq(from=MinL, by=BinWidth, to=MaxL)
-#   LMids <- seq(from=LBins[1] + 0.5*BinWidth, by=BinWidth, length.out=length(LBins)-1)
-#
-#   Weight <- Walpha * LMids^Wbeta
-#
-#   # Maturity and Fecundity for each GTG
-#   L50GTG <- L50/Linf * gtgLinfs # Maturity at same relative size
-#   L95GTG <- L95/Linf * gtgLinfs # Assumes maturity age-dependant
-#   DeltaGTG <- L95GTG - L50GTG
-#   MatLengtg <- sapply(seq_along(gtgLinfs), function (X)
-#     1.0/(1+exp(-log(19)*(LMids-L50GTG[X])/DeltaGTG[X])))
-#   FecLengtg <- MatLengtg * LMids^Wbeta # Fecundity across GTGs
-#
-#
-#   # Selectivity - asymptotic only at this stage - by careful with knife-edge
-#   SelLen <- 1.0/(1+exp(-log(19)*(LBins-(SL50+0.5*BinWidth))/ ((SL95+0.5*BinWidth)-(SL50+0.5*BinWidth))))
-#
-#   MK <- M/K
-#   FM <- F/M
-#   # Life-History Ratios
-#   MKL <- MK * (Linf/(LBins+0.5*BinWidth))^Mpow # M/K ratio for each length class
-#   # Matrix of MK for each GTG
-#   MKMat <- matrix(rep(MKL, ngtg), nrow=length(MKL), byrow=FALSE)
-#   FK <- FM * MK # F/K ratio
-#   FKL <- FK * SelLen # F/K ratio for each length class
-#
-#   # Minimum legal length
-#   plegal2 <- rep(1, length(LMids))
-#   if (length(MLL)>0) {
-#     plegal <- 1/(1+exp(-(LBins-MLL)/sdLegal))
-#     plegal2 <- 1/(1+exp(-(LMids-MLL)/sdLegal))
-#     FKL <- FKL * (plegal + (1-plegal) * fDisc)
-#   }
-#   ZKLMat <- MKMat + FKL # Z/K ratio (total mortality) for each GTG
-#
-#
-#   # Set Up Empty Matrices
-#   # number-per-recruit at length
-#   NPRFished <- NPRUnfished <- matrix(0, nrow=length(LBins), ncol=ngtg)
-#   NatLUF <- matrix(0, nrow=length(LMids), ncol=ngtg) # N at L unfished
-#   NatLF <- matrix(0, nrow=length(LMids), ncol=ngtg) # N at L fished
-#   FecGTG <- matrix(0, nrow=length(LMids), ncol=ngtg) # fecundity of GTG
-#
-#   # Distribute Recruits into first length class
-#   NPRFished[1, ] <- NPRUnfished[1, ] <- recP * R0
-#   for (L in 2:length(LBins)) { # Calc number at each size class
-#     NPRUnfished[L, ] <- NPRUnfished[L-1, ] * ((gtgLinfs-LBins[L])/(gtgLinfs-LBins[L-1]))^MKMat[L-1, ]
-#     NPRFished[L, ] <- NPRFished[L-1, ] *  ((gtgLinfs-LBins[L])/(gtgLinfs-LBins[L-1]))^ZKLMat[L-1, ]
-#     ind <- gtgLinfs  < LBins[L]
-#     NPRFished[L, ind] <- 0
-#     NPRUnfished[L, ind] <- 0
-#   }
-#   NPRUnfished[is.nan(NPRUnfished)] <- 0
-#   NPRFished[is.nan(NPRFished)] <- 0
-#   NPRUnfished[NPRUnfished < 0] <- 0
-#   NPRFished[NPRFished < 0] <- 0
-#
-#   for (L in 1:length(LMids)) { # integrate over time in each size class
-#     NatLUF[L, ] <- (NPRUnfished[L,] - NPRUnfished[L+1,])/MKMat[L, ]
-#     NatLF[L, ] <- (NPRFished[L,] - NPRFished[L+1,])/ZKLMat[L, ]
-#     FecGTG[L, ] <- NatLUF[L, ] * FecLengtg[L, ]
-#   }
-#
-#   SelLen2 <- 1.0/(1+exp(-log(19)*(LMids-SL50)/(SL95-SL50))) # Selectivity-at-Length
-#   NatLV <- NatLUF * SelLen2 # Unfished Vul Pop
-#   NatLC <- NatLF * SelLen2 # Catch Vul Pop
-#
-#
-#   # Aggregate across GTGs
-#   Nc <- apply(NatLC, 1, sum)/sum(apply(NatLC, 1, sum))
-#   VulnUF <- apply(NatLV, 1, sum)/sum(apply(NatLV, 1, sum))
-#   PopUF <- apply(NatLUF, 1, sum)/sum(apply(NatLUF, 1, sum))
-#   PopF <- apply(NatLF, 1, sum)/sum(apply(NatLF, 1, sum))
-#
-#   # Calc SPR
-#   B0 <- sum(NatLUF * Weight)
-#   SSB0 <- sum(NatLUF * Weight * MatLengtg)
-#   EPR0 <- sum(NatLUF * FecLengtg) # Eggs-per-recruit Unfished
-#   EPRf <- sum(NatLF * FecLengtg) # Eggs-per-recruit Fished
-#   SPR <- EPRf/EPR0
-#
-#   # Equilibrium Relative Recruitment
-#   recK <- (4*Steepness)/(1-Steepness) # Goodyear compensation ratio
-#   reca <- recK/EPR0
-#   recb <- (reca * EPR0 - 1)/(R0*EPR0)
-#   RelRec <- max(0, (reca * EPRf-1)/(recb*EPRf))
-#   if (!is.finite(RelRec)) RelRec <- 0
-#
-#   # RelRec/R0 - relative recruitment
-#
-#
-#
-#   YPR <- sum(NatLC  * Weight * SelLen2 * plegal2) * FM
-#
-#
-#   Yield <- YPR * RelRec
-#
-#   # Spawning Stock Biomass
-#   SSB <- sum(NatLF  * RelRec * Weight * MatLengtg)
-#
-#
-# }
 
 findMLL <- function(x, DF, Ftot, LMax, Lint, fDisc, sdLegal=1, control=1) {
   if (control ==1 )
@@ -219,6 +83,20 @@ findMLL <- function(x, DF, Ftot, LMax, Lint, fDisc, sdLegal=1, control=1) {
     return(optMLL(logMLL=log(DF$mll[x]),  DF=DF,  Ftot=Ftot, LMax=LMax,
                         Lint=Lint, fDisc=fDisc, sdLegal=1, control=control, x=x))
   }
+}
+
+findGroupMLL <- function(group, DF, Ftot, LMax, Lint, fDisc, sdLegal=1, control=1) {
+  tempDF <- DF %>% filter(groups==group)
+  opt <- optimize(optgroup, interval=log(range(tempDF$optMLL)*c(0.7, 1.3)), tempDF, Ftot, LMax, Lint, fDisc, sdLegal=1, control=1)
+  exp(opt$minimum)
+}
+
+optgroup <- function(logMLL, tempDF, Ftot, LMax, Lint, fDisc, sdLegal=1, control=1) {
+  yield <- NULL
+  for (x in 1:nrow(tempDF)) {
+    yield[x] <- - optMLL(logMLL=logMLL, tempDF, Ftot, LMax, Lint, fDisc, sdLegal=1, control=1, x)
+  }
+  -sum(yield * tempDF$Weight)
 }
 
 optMLL <- function(logMLL, DF, Ftot, LMax, Lint, fDisc, sdLegal=1, control=1, x) {
@@ -279,6 +157,7 @@ calcR0 <- function(scenario=1, plot=TRUE, useParallel=TRUE, Lint=2) {
   suppressMessages(library(ggrepel))
   snowfall::sfInit(TRUE, 3)
   snowfall::sfLibrary(LBSPR)
+  snowfall::sfLibrary(dplyr)
 
   message("Calculating R0 ...")
   DF <- importData(scenario, nspecies=NA)
@@ -306,32 +185,35 @@ calcR0 <- function(scenario=1, plot=TRUE, useParallel=TRUE, Lint=2) {
 
 
 
-runMod <- function(DF, F1, F2, fDisc, Lint=2, plot=TRUE, useParallel=TRUE) {
+runMod <- function(DF, F1, F2, fDisc, Lint=2, plot=TRUE, useParallel=TRUE, optMLL=TRUE) {
   LMax <- ceiling(max(DF$Linf)/Lint) * Lint
   nSp <- nrow(DF)
 
   # --- Optimise best MLL for each Species (at F = Ftot) ----
   message("Calculating best MLL for each species at F = ", F2)
   if (!useParallel) {
-    mll <- sapply(1:nSp, findMLL, DF, Ftot=F2, LMax, Lint, fDisc, sdLegal=1, control=1)
+    optMLLs <- sapply(1:nSp, findMLL, DF, Ftot=F2, LMax, Lint, fDisc, sdLegal=1, control=1)
   } else {
-    mll <- snowfall::sfSapply(1:nSp, findMLL, DF, Ftot=F2, LMax, Lint, fDisc, sdLegal=1, control=1)
+    optMLLs <- snowfall::sfSapply(1:nSp, findMLL, DF, Ftot=F2, LMax, Lint, fDisc, sdLegal=1, control=1)
   }
-
-  optMLLs <- round(mll,0)
+  optMLLs <- round(optMLLs,0)
   optMLLs[optMLLs < DF$SL50] <- DF$SL50[optMLLs < DF$SL50]
   DF$optMLL <- optMLLs
 
   temp <- DF
   temp$mll <- temp$optMLL
-  temp2  <- sapply(1:nSp, findMLL, temp, Ftot=F2, LMax, Lint, fDisc, sdLegal=1, control=2)
+  if (!useParallel) {
+    temp2  <- sapply(1:nSp, findMLL, temp, Ftot=F2, LMax, Lint, fDisc, sdLegal=1, control=2)
+  } else{
+    temp2  <- snowfall::sfSapply(1:nSp, findMLL, temp, Ftot=F2, LMax, Lint, fDisc, sdLegal=1, control=2)
+  }
+
   DF$optYield <- temp2[1,]
   DF$optSB <- temp2[3,]
 
   FVec <- c(F1, F2) # seq(0, to=HighF, by=0.05) # vector if fishing mortality
 
   NLimits <- 1:nSp
-
   out <- list()
   count <- 0
   doneNLimits <- NULL
@@ -349,17 +231,28 @@ runMod <- function(DF, F1, F2, fDisc, Lint=2, plot=TRUE, useParallel=TRUE) {
       message("Already calculated ", actLimit,  ". Skipping")
     } else {
       NLimit <- actLimit
-      # DF2 <- DF %>% group_by(groups) %>% mutate(mll=mean(optMLL))
-      #
-      # temp <- DF %>% group_by(groups) %>% mutate(mll=mean(optMLL))
-      # temp$mll
+      # DF2 <- DF %>% group_by(groups) %>% mutate(mll=weighted.mean(optMLL, optYield * (1 + 4*optMLL/100)))
+      DF2 <- DF %>% group_by(groups) %>% mutate(weighted.mll=weighted.mean(optMLL, Weight))
 
-      DF2 <- DF %>% group_by(groups) %>% mutate(mll=weighted.mean(optMLL, optYield * (1 + 4*optMLL/100)))
+      # DF2 %>% filter(groups == 1) %>% select(optMLL)
 
+      # optimize for best MLL for group - weighted yield
+      if (optMLL) {
+        message("Optimizing for ", actLimit, ' size limits')
+        if (!useParallel) {
+          tt <- sapply(sort(unique(DF$groups)), findGroupMLL, DF2, Ftot=F2, LMax, Lint, fDisc, sdLegal=1, control=1)
+        } else {
+          tt <- snowfall::sfSapply(sort(unique(DF$groups)), findGroupMLL, DF2, Ftot=F2, LMax, Lint, fDisc, sdLegal=1, control=1)
+        }
 
+        tempDF <- data.frame(groups=sort(unique(DF$groups)), mll=tt)
+        DF3 <- left_join(DF2, tempDF, by='groups')
+        outDF <- doCalcs(DF3, nSp, FVec, LMax, Lint, fDisc, useParallel)
+      } else {
+        DF2$mll <- DF2$weighted.mll
+        outDF <- doCalcs(DF2, nSp, FVec, LMax, Lint, fDisc, useParallel)
+      }
 
-
-      outDF <- doCalcs(DF2, nSp, FVec, LMax, Lint, fDisc, useParallel)
       outDF$NLimits <- NLimit
       count <- count + 1
       out[[count]] <- outDF
@@ -368,54 +261,45 @@ runMod <- function(DF, F1, F2, fDisc, Lint=2, plot=TRUE, useParallel=TRUE) {
   }
 
   outDF <- do.call("rbind", out)
+  outDF$F1 <- F1
+  outDF$F2 <- F2
 
   # Plots
 
   # Plot total yield by number of limits @ F = F1
-  df <- outDF %>% filter(F==F1) %>% group_by(NLimits) %>% summarise(Yield=sum(Yield))
-  p1 <- ggplot2::ggplot(df, aes(x = NLimits, y = Yield/max(Yield))) + geom_line() + geom_point() +ggplot2::ylim(0, 1)  + ggplot2::theme_classic() +
-    ggplot2::labs(x="# Size Limits", y="Relative Yield", title=paste("F = ", F1))
+  df <- outDF %>% filter(F==F1) %>% group_by(NLimits) %>% summarise(Yield=sum(Yield*Weight))
+  p1 <- ggplot2::ggplot(df, aes(x = NLimits, y = Yield/max(Yield))) + geom_line() +
+    geom_point() +ggplot2::ylim(0, 1)  + ggplot2::theme_classic() +
+    ggplot2::labs(x="# Size Limits", y="Weighted Yield", title=paste("F = ", F1))
 
   # Plot total yield by number of limits @ F = F2
-  df <- outDF %>% filter(F==F2) %>% group_by(NLimits) %>% summarise(Yield=sum(Yield))
+  df <- outDF %>% filter(F==F2) %>% group_by(NLimits) %>% summarise(Yield=sum(Yield*Weight))
   p2 <- ggplot2::ggplot(df, aes(x = NLimits, y = Yield/max(Yield))) + geom_line() + geom_point() + ggplot2::ylim(0, 1) + ggplot2::theme_classic() +
-    ggplot2::labs(x="# Size Limits", y="Relative Yield", title=paste("F = ", F2))
+    ggplot2::labs(x="# Size Limits", y="Weighted Yield", title=paste("F = ", F2))
+
+  # Plot number extinct by number of limits @ F = F1
+  df <- outDF %>% filter(F==F1) %>% group_by(NLimits) %>% summarise(n=sum(SB==0))
+  p5 <- ggplot2::ggplot(df, aes(x = NLimits, y = n/nSp)) + geom_line() + geom_point() + ggplot2::ylim(0, 1) +
+    ggplot2::theme_classic() +
+    ggplot2::labs(x="# Size Limits", y="Fraction Extinct", title=paste("F = ", F1))
 
   # Plot number extinct by number of limits @ F = F2
   df <- outDF %>% filter(F==F2) %>% group_by(NLimits) %>% summarise(n=sum(SB==0))
-  p3 <- ggplot2::ggplot(df, aes(x = NLimits, y = n/nSp)) + geom_line() + geom_point() + ggplot2::ylim(0, 1) +
+  p6 <- ggplot2::ggplot(df, aes(x = NLimits, y = n/nSp)) + geom_line() + geom_point() + ggplot2::ylim(0, 1) +
     ggplot2::theme_classic() +
     ggplot2::labs(x="# Size Limits", y="Fraction Extinct", title=paste("F = ", F2))
 
-
-  # Plot % contribution by species @ F = F1
-  df <- outDF %>% filter(F==F1) %>% group_by(Species)  %>% summarise(YieldS=sum(Yield))
-  df$RelYield <- df$YieldS/sum(df$YieldS)
-
-  df <- df %>% arrange(RelYield)
-  df$RelYield2 <- cumsum(df$RelYield)
-  df$n <- 1:nrow(df)
-
-  p4 <- ggplot2::ggplot(df, aes(x=n, y=RelYield2)) + ggplot2::geom_line() + geom_point() + ggplot2::ylim(0, 1) +
-    ggplot2::theme_classic() +
-    ggplot2::labs(x="# Species", y="Cumulative contribution to total yield ", title=paste("F = ", F1))
-
-  pout <- gridExtra::grid.arrange(p1, p2, p4, p3, ncol=2)
-
-  tt <- df %>% filter(RelYield > 0.05)
-  if(dim(tt)[1] > 0) {
-    message("\nSpecies contributing more than 5% of total catch at F = ", F1)
-    df$RelYield <- round(df$RelYield,2)
-    print(df %>% filter(RelYield > 0.05) %>% select(Species, RelYield) %>% as.data.frame())
-  }
+  pout <- gridExtra::grid.arrange(p1, p2, p5, p6, ncol=2)
 
   return(outDF)
 }
 
 
-getSL <- function(DF, nLimits=5) {
 
-  tt <- DF %>% filter(nLimits==NLimits) %>% group_by(Species) %>% summarise(sl=unique(mll))
+
+getSL <- function(nLimits=5, round=5, DF, fDisc, useParallel=TRUE, useWeight=TRUE) {
+
+  tt <- DF %>% filter(NLimits==nLimits) %>% group_by(Species) %>% summarise(sl=unique(mll))
 
   sls <- sort(unique(tt$sl))
   n <- max(table(tt$sl))
@@ -429,8 +313,55 @@ getSL <- function(DF, nLimits=5) {
   }
   mat[is.na(mat)] <- ''
   mat <- as.data.frame(mat)
-  colnames(mat) <- round(sls,0)
-  mat
+
+
+  F1 <- unique(DF$F1)
+
+  # Plot % contribution by species @ F = F1
+  if (!useWeight) {
+    df <- DF %>% filter(NLimits==nLimits, F==F1) %>% group_by(Species) %>% summarise(YieldS=sum(Yield))
+    df$RelYield <- df$YieldS/sum(df$YieldS)
+    df <- df %>% mutate(Species=forcats::fct_reorder(Species, RelYield))
+
+    p1 <- ggplot2::ggplot(df, aes(x=Species, y=RelYield))  + ggplot2::geom_bar(stat='identity') +
+      ggplot2::theme_classic() +
+      ggplot2::labs(x="Species", y="Relative yield ", title=paste("F = ", F1)) + coord_flip()
+
+  } else{
+    df <- DF %>% filter(NLimits==nLimits, F==F1) %>% group_by(Species) %>% summarise(YieldS=sum(Yield*Weight))
+    df$RelYield <- df$YieldS/sum(df$YieldS)
+    df <- df %>% mutate(Species=forcats::fct_reorder(Species, RelYield))
+
+    p1 <- ggplot2::ggplot(df, aes(x=Species, y=RelYield))  + ggplot2::geom_bar(stat='identity') +
+      ggplot2::theme_classic() +
+      ggplot2::labs(x="Species", y="Weighted yield ", title=paste("F = ", F1, "  # Limits = ", nLimits)) +
+
+      coord_flip()
+  }
+
+  print(p1)
+
+
+  t2 <- DF %>% filter(F==F1, NLimits==nLimits)
+  nSp <- nrow(t2)
+  Lint <- 2
+  LMax <- ceiling(max(t2$Linf)/Lint) * Lint
+  t2$mll <- round(t2$mll/round,0) * round
+  t2$Yield <- t2$SPR <- t2$F <- t2$SB <- NULL
+  outDF <- doCalcs(t2, nSp, FVec=F1, LMax, Lint, fDisc, useParallel)
+
+  chng <- (round(sum(outDF$Yield) / DF %>% filter(F==F1, nLimits==NLimits) %>% summarise(sum(Yield)),2)-1) * 100
+
+  message("\nRounding to nearest ", round)
+  message("\nExpected change in yield = ",  chng, "%")
+  colnames(mat) <- round(sls/round,0) * round
+
+  print(mat)
+
+
 }
+
+
+
 
 
