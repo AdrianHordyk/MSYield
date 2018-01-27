@@ -16,7 +16,7 @@ importData <- function(scenario=1,  nspecies=NA, filename='parameters.xlsx') {
   Names <- c("Species", "M_k", "Lm_Linf", "M", "K", "Linf", "L50", "L95", "SL50", "SL95",
              "B0", "Mpow", "h", "Weight")
 
-  if (any(!names(DF) %in% Names)) stop("invalid names in input file. Must be: ", paste(Names, " ", sep=" "))
+  if (!any(Names %in% names(DF))) stop("invalid names in input file. Must be: ", paste(Names, " ", sep=" "))
 
   if (sum(DF$SL50 > DF$SL95)) {
     ind <- DF$SL50 > DF$SL95
