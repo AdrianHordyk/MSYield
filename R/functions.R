@@ -151,7 +151,7 @@ doCalcs <- function(DF2, nSp, FVec, LMax, Lint, fDisc, useParallel=FALSE) {
 }
 
 
-calcR0 <- function(scenario=1, plot=TRUE, useParallel=TRUE, Lint=2) {
+calcR0 <- function(scenario=1, plot=TRUE, useParallel=TRUE, Lint=2, size=2.5) {
   suppressMessages(library(ggplot2))
   suppressMessages(library(dplyr))
   suppressMessages(library(ggrepel))
@@ -171,13 +171,18 @@ calcR0 <- function(scenario=1, plot=TRUE, useParallel=TRUE, Lint=2) {
   }
 
   p1 <-  ggplot2::ggplot(DF, ggplot2::aes(x=Linf, y=M_k, size=R0, label=Species)) + ggplot2::geom_point() +
-    ggrepel::geom_text_repel(size=4) +ggplot2::theme_classic() + ggplot2::labs(x="Linf", y="M/K")
+    ggrepel::geom_text_repel(size=size) +ggplot2::theme_classic() + ggplot2::labs(x="Linf", y="M/K")
 
   p2 <-  ggplot2::ggplot(DF, ggplot2::aes(x=Linf, y=M_k, size=B0, label=Species)) + ggplot2::geom_point() +
-    ggrepel::geom_text_repel(size=4) +ggplot2::theme_classic() + ggplot2::labs(x="Linf", y="M/K")
+    ggrepel::geom_text_repel(size=size) +ggplot2::theme_classic() + ggplot2::labs(x="Linf", y="M/K")
 
   pout <- gridExtra::grid.arrange(p1, p2, ncol=2)
   if (plot) pout
+
+  df <- DF %>% dplyr::select(Species, M_k, Lm_Linf, R0, B0)
+  if (!dir.exists('output')) dir.create('output')
+  name <- paste0('output/R0_B0_scen_', scenario, ".csv")
+  write.csv(df, file=name)
 
   return(invisible(DF))
 
@@ -291,13 +296,42 @@ runMod <- function(DF, F1, F2, fDisc, Lint=2, plot=TRUE, useParallel=TRUE, optML
 
   pout <- gridExtra::grid.arrange(p1, p2, p5, p6, ncol=2)
 
+  # output file
+  Y1 <- outDF %>% filter(F==F1) %>% group_by(NLimits) %>% summarise(Rel.Yield.F1=sum(Yield*Weight),
+                                                                    n.extinct.F1=sum(SB==0))
+  Y1$Rel.Yield.F1 <- round(Y1$Rel.Yield.F1,0)
+  Y2 <- outDF %>% filter(F==F2) %>% group_by(NLimits) %>% summarise(Rel.Yield.F2=sum(Yield*Weight),
+                                                                    n.extinct.F2=sum(SB==0))
+  Y2$Rel.Yield.F2 <- round(Y2$Rel.Yield.F2,0)
+
+  F2_extinct <- outDF %>% filter(F==F2) %>% group_by(NLimits) %>% filter(SB==0) %>% select(NLimits, Species)
+  tab <-  table(F2_extinct)
+  ncol <- ncol(tab)
+  nrow <- nrow(tab)
+  mat <- matrix(NA, ncol=ncol, nrow=nrow)
+  for (r in 1:nrow) {
+    temp <-  names(tab[r,tab[r,] > 0])
+    mat[r,] <- c(temp, rep('', ncol-length(temp)))
+  }
+  mat <- data.frame(mat, stringsAsFactors = FALSE)
+  mat$NLimits <- unique(F2_extinct$NLimits)
+
+  df <- left_join(Y1, Y2, by="NLimits")
+  df2 <- left_join(df, mat, by="NLimits")
+  df2[is.na(df2)] <- ''
+
+  if (!dir.exists('output')) dir.create('output')
+  name <- paste0('output/Yield_extinct_scen_', scenario, ".csv")
+  write.csv(df2, file=name)
+
+
   return(outDF)
 }
 
 
 
 
-getSL <- function(nLimits=5, round=5, DF, fDisc, useParallel=TRUE, useWeight=TRUE) {
+getSL <- function(nLimits=5, round=5, DF, fDisc, useParallel=TRUE, useWeight=TRUE, font.size=10) {
 
   tt <- DF %>% filter(NLimits==nLimits) %>% group_by(Species) %>% summarise(sl=unique(mll))
 
@@ -325,6 +359,7 @@ getSL <- function(nLimits=5, round=5, DF, fDisc, useParallel=TRUE, useWeight=TRU
 
     p1 <- ggplot2::ggplot(df, aes(x=Species, y=RelYield))  + ggplot2::geom_bar(stat='identity') +
       ggplot2::theme_classic() +
+      theme(text = element_text(size=font.size)) +
       ggplot2::labs(x="Species", y="Relative yield ", title=paste("F = ", F1)) + coord_flip()
 
   } else{
@@ -334,6 +369,7 @@ getSL <- function(nLimits=5, round=5, DF, fDisc, useParallel=TRUE, useWeight=TRU
 
     p1 <- ggplot2::ggplot(df, aes(x=Species, y=RelYield))  + ggplot2::geom_bar(stat='identity') +
       ggplot2::theme_classic() +
+      theme(text = element_text(size=font.size)) +
       ggplot2::labs(x="Species", y="Weighted yield ", title=paste("F = ", F1, "  # Limits = ", nLimits)) +
 
       coord_flip()
@@ -358,6 +394,16 @@ getSL <- function(nLimits=5, round=5, DF, fDisc, useParallel=TRUE, useWeight=TRU
 
   print(mat)
 
+  if (!useWeight) {
+    saveDF <- DF %>% filter(NLimits==nLimits) %>% group_by(Species, F) %>% summarise(YieldS=sum(Yield))
+  } else {
+    saveDF <- DF %>% filter(NLimits==nLimits) %>% group_by(Species, F) %>% summarise(YieldS=sum(Yield*Weight))
+  }
+  saveDF2 <- saveDF %>% select(Species, F, YieldS) %>% tidyr::spread(F, YieldS)
+
+  if (!dir.exists('output')) dir.create('output')
+  name <- paste0('output/NLimits_', nLimits, "_scen_",  scenario, ".csv")
+  write.csv(saveDF2, file=name)
 
 }
 
