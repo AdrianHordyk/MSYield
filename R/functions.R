@@ -12,7 +12,21 @@
 
 importData <- function(scenario=1,  nspecies=NA, filename='parameters.xlsx') {
 
-  DF <- readxl::read_excel(filename, sheet=scenario)
+  sheets <- readxl::excel_sheets(filename)
+  if (class(scenario) == "character") {
+    if (scenario %in% sheets) {
+      message("Reading sheet ", scenario)
+      DF <- readxl::read_excel(filename, sheet=scenario)
+    } else {
+      stop("Sheet ", scenario, ' not found in ', filename, call. = FALSE)
+    }
+  } else if (class(scenario) == "numeric") {
+    if (scenario > length(sheets)) stop("Cannot read sheet ", scenario, '. Only ', length(sheets), ' sheets in ', filename, call. = FALSE)
+    sheet <- sheets[scenario]
+    message("Reading sheet ", sheet)
+    DF <- readxl::read_excel(filename, sheet=sheet)
+  } else stop("Invalid scenario")
+
   Names <- c("Species", "M_k", "Lm_Linf", "M", "K", "Linf", "L50", "L95", "SL50", "SL95",
              "B0", "Mpow", "h", "Weight")
 
