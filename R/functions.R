@@ -15,7 +15,7 @@ importData <- function(scenario=1,  nspecies=NA, filename='parameters.xlsx') {
   sheets <- readxl::excel_sheets(filename)
   if (class(scenario) == "character") {
     if (scenario %in% sheets) {
-      message("Reading sheet ", scenario)
+      message("Reading sheet ", scenario, ' from ', filename)
       DF <- readxl::read_excel(filename, sheet=scenario)
     } else {
       stop("Sheet ", scenario, ' not found in ', filename, call. = FALSE)
@@ -23,7 +23,7 @@ importData <- function(scenario=1,  nspecies=NA, filename='parameters.xlsx') {
   } else if (class(scenario) == "numeric") {
     if (scenario > length(sheets)) stop("Cannot read sheet ", scenario, '. Only ', length(sheets), ' sheets in ', filename, call. = FALSE)
     sheet <- sheets[scenario]
-    message("Reading sheet ", sheet)
+    message("Reading sheet ", sheet, ' from ', filename)
     DF <- readxl::read_excel(filename, sheet=sheet)
   } else stop("Invalid scenario")
 
@@ -165,7 +165,8 @@ doCalcs <- function(DF2, nSp, FVec, LMax, Lint, fDisc, useParallel=FALSE) {
 }
 
 
-calcR0 <- function(scenario=1, plot=TRUE, useParallel=TRUE, Lint=2, size=2.5) {
+calcR0 <- function(scenario=1, plot=TRUE, useParallel=TRUE, Lint=2, size=2.5,
+                   filename='parameters.xlsx') {
   suppressMessages(library(ggplot2))
   suppressMessages(library(dplyr))
   suppressMessages(library(ggrepel))
@@ -174,7 +175,7 @@ calcR0 <- function(scenario=1, plot=TRUE, useParallel=TRUE, Lint=2, size=2.5) {
   snowfall::sfLibrary(dplyr)
 
   message("Calculating R0 ...")
-  DF <- importData(scenario, nspecies=NA)
+  DF <- importData(scenario, nspecies=NA, filename = filename)
   LMax <- ceiling(max(DF$Linf)/Lint) * Lint
   nSp <- nrow(DF)
   # --- Calc R0 that gives B0 ----
@@ -232,7 +233,7 @@ runMod <- function(DF, F1, F2, fDisc, Lint=2, plot=TRUE, useParallel=TRUE, optML
 
   FVec <- c(F1, F2) # seq(0, to=HighF, by=0.05) # vector if fishing mortality
 
-  NLimits <- 1:nSp
+  NLimits <- 0:nSp
   out <- list()
   count <- 0
   doneNLimits <- NULL
@@ -240,43 +241,52 @@ runMod <- function(DF, F1, F2, fDisc, Lint=2, plot=TRUE, useParallel=TRUE, optML
   for (NLimit in NLimits) {
     message("Calculating ", NLimit, " Size Limit(s)")
     if (NLimit > nSp) NLimit <- nSp
-    breaks <- unique(BAMMtools::getJenksBreaks(DF$optMLL, NLimit+1))
-    breaks[which.min(breaks)] <- floor(breaks[which.min(breaks)]) - 2
-    breaks[which.max(breaks)] <- ceiling(breaks[which.max(breaks)]) + 2
-    DF$groups <- as.numeric(cut(DF$optMLL, breaks))
-    actLimit <- length(unique(DF$groups))
-    if (actLimit != NLimit)   message("Note: Some size limits are equal. Grouping into ", actLimit,  " instead")
-    if (actLimit %in% doneNLimits) {
-      message("Already calculated ", actLimit,  ". Skipping")
-    } else {
-      NLimit <- actLimit
-      # DF2 <- DF %>% group_by(groups) %>% mutate(mll=weighted.mean(optMLL, optYield * (1 + 4*optMLL/100)))
-      DF2 <- DF %>% group_by(groups) %>% mutate(weighted.mll=weighted.mean(optMLL, Weight))
-
-      # DF2 %>% filter(groups == 1) %>% select(optMLL)
-
-      # optimize for best MLL for group - weighted yield
-      if (optMLL) {
-        message("Optimizing for ", actLimit, ' size limits')
-        if (!useParallel) {
-          tt <- sapply(sort(unique(DF$groups)), findGroupMLL, DF2, Ftot=F2, LMax, Lint, fDisc, sdLegal=1, control=1)
-        } else {
-          tt <- snowfall::sfSapply(sort(unique(DF$groups)), findGroupMLL, DF2, Ftot=F2, LMax, Lint, fDisc, sdLegal=1, control=1)
-        }
-
-        tempDF <- data.frame(groups=sort(unique(DF$groups)), mll=tt)
-        DF3 <- left_join(DF2, tempDF, by='groups')
-        outDF <- doCalcs(DF3, nSp, FVec, LMax, Lint, fDisc, useParallel)
+    if (NLimit>0) {
+      breaks <- unique(BAMMtools::getJenksBreaks(DF$optMLL, NLimit+1))
+      breaks[which.min(breaks)] <- floor(breaks[which.min(breaks)]) - 2
+      breaks[which.max(breaks)] <- ceiling(breaks[which.max(breaks)]) + 2
+      DF$groups <- as.numeric(cut(DF$optMLL, breaks))
+      actLimit <- length(unique(DF$groups))
+      if (actLimit != NLimit)   message("Note: Some size limits are equal. Grouping into ", actLimit,  " instead")
+      if (actLimit %in% doneNLimits) {
+        message("Already calculated ", actLimit,  ". Skipping")
       } else {
-        DF2$mll <- DF2$weighted.mll
-        outDF <- doCalcs(DF2, nSp, FVec, LMax, Lint, fDisc, useParallel)
-      }
+        NLimit <- actLimit
+        # DF2 <- DF %>% group_by(groups) %>% mutate(mll=weighted.mean(optMLL, optYield * (1 + 4*optMLL/100)))
+        DF2 <- DF %>% group_by(groups) %>% mutate(weighted.mll=weighted.mean(optMLL, Weight))
 
-      outDF$NLimits <- NLimit
-      count <- count + 1
-      out[[count]] <- outDF
-      doneNLimits[count] <- NLimit
+        # DF2 %>% filter(groups == 1) %>% select(optMLL)
+
+        # optimize for best MLL for group - weighted yield
+        if (optMLL) {
+          message("Optimizing for ", actLimit, ' size limits')
+          if (!useParallel) {
+            tt <- sapply(sort(unique(DF$groups)), findGroupMLL, DF2, Ftot=F2, LMax, Lint, fDisc, sdLegal=1, control=1)
+          } else {
+            tt <- snowfall::sfSapply(sort(unique(DF$groups)), findGroupMLL, DF2, Ftot=F2, LMax, Lint, fDisc, sdLegal=1, control=1)
+          }
+
+          tempDF <- data.frame(groups=sort(unique(DF$groups)), mll=tt)
+          DF3 <- left_join(DF2, tempDF, by='groups')
+          outDF <- doCalcs(DF3, nSp, FVec, LMax, Lint, fDisc, useParallel)
+        } else {
+          DF2$mll <- DF2$weighted.mll
+          outDF <- doCalcs(DF2, nSp, FVec, LMax, Lint, fDisc, useParallel)
+        }
+      }
+    } else {
+      DF2 <- DF
+      DF2$groups <- 1:nSp
+      DF2$mll <- 0
+      DF2$weighted.mll <- 0
+      outDF <- doCalcs(DF2, nSp, FVec, LMax, Lint, fDisc, useParallel)
     }
+
+
+    outDF$NLimits <- NLimit
+    count <- count + 1
+    out[[count]] <- outDF
+    doneNLimits[count] <- NLimit
   }
 
   outDF <- do.call("rbind", out)
@@ -324,7 +334,9 @@ runMod <- function(DF, F1, F2, fDisc, Lint=2, plot=TRUE, useParallel=TRUE, optML
   nrow <- nrow(tab)
   mat <- matrix(NA, ncol=ncol, nrow=nrow)
   for (r in 1:nrow) {
-    temp <-  names(tab[r,tab[r,] > 0])
+    nms <- colnames(tab)
+    temp <- nms[which(tab[r,] > 0)]
+
     mat[r,] <- c(temp, rep('', ncol-length(temp)))
   }
   mat <- data.frame(mat, stringsAsFactors = FALSE)
